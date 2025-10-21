@@ -1,8 +1,6 @@
 streamlit
 yt-dlp
-librosa
-soundfile
+youtube-transcript-api
 transformers
 torch
-ffmpeg-python
-gTTS
+
