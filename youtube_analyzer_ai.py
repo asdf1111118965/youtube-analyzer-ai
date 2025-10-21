@@ -8,7 +8,7 @@ import subprocess
 from transformers import pipeline, WhisperProcessor, WhisperForConditionalGeneration
 
 # ---------- CONFIG ----------
-st.set_page_config(page_title="🎥 YouTube Analyzer AI (Free)", page_icon="🤖", layout="centered")
+st.set_page_config(page_title="🎥 YouTube Analyzer AI (free)", page_icon="🤖", layout="centered")
 
 # ---------- Load Models ----------
 @st.cache_resource
@@ -85,7 +85,7 @@ def summarize_long_text(text, max_chunk_len=3000):
     full_summary = ""
 
     for i, chunk in enumerate(chunks):
-        st.write(f"🧩 Summarizing section {i+1}/{len(chunks)}...")
+        st.write(f"Work under construction 🚧 {i+1}/{len(chunks)}...")
         summary = summarizer(chunk, max_length=300, min_length=80, do_sample=False)[0]['summary_text']
         full_summary += " " + summary
 
@@ -102,22 +102,37 @@ def analyze_content(transcript, style="Formal"):
     summary = ". ".join([s.strip().capitalize() for s in summary.split('.') if s.strip()])
 
     structured_output = f"""
-    **1️⃣ Title / Topic:**  
-    {summary.split('.')[0].strip() if summary else 'N/A'}
+    def analyze_content(transcript, style="Formal"):
+    st.info("🧠 Analyzing content using GPT...")
 
-    **2️⃣ Main Themes:**  
-    - {summary.split('.')[1].strip() if len(summary.split('.')) > 1 else ''}
-    - {summary.split('.')[2].strip() if len(summary.split('.')) > 2 else ''}
+    prompt = f"""
+    You are a professional summarizer and content analyst.
+    Read the YouTube transcript below carefully and structure your analysis strictly in this format:
 
-    **3️⃣ Key Facts:**  
-    Derived from summarized context.
+    1️⃣ **Heading:**  
+    Provide the overall topic or main theme of the video (max 1–2 lines).
 
-    **4️⃣ Notable Quotes:**  
-    Not available (local Whisper output).
+    2️⃣ **Topic and Sub-Topics:**  
+    - Write clear bullet points or short paragraphs explaining the main topics covered.  
+    - Include key insights, concepts, or facts from each part of the video.  
+    - Ensure logical flow and clarity.  
+    - Avoid repetition or filler content.  
 
-    **5️⃣ Summary ({style} style):**  
-    {summary.strip()}
+    3️⃣ **Conclusion:**  
+    Provide a concise conclusion or takeaway summarizing the overall message of the video.
+
+    Write the response in a {style} tone and keep it well-organized, easy to read, and formatted with bullet points and line breaks.
+
+    Transcript:
+    {transcript}
     """
+
+    response = client.chat.completions.create(
+        model="gpt-5-turbo",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.choices[0].message.content
+
     return structured_output
 
 # ---------- Function: Create Podcast (macOS say + ffmpeg) ----------
@@ -160,11 +175,11 @@ def create_podcast(text):
         raise FileNotFoundError("⚠️ Podcast file creation failed.")
 
 # ---------- STREAMLIT APP ----------
-st.title("🎥 YouTube Analysis AI Agent (Free Version)")
-st.markdown("💡 Works 100% offline — no OpenAI key, no payments required.")
+st.title("🎥 YouTube Analysis AI Agent (No Login No payment)")
+st.markdown("💡 Works 100% Unlimited trials")
 
 link = st.text_input("🔗 Enter YouTube Video URL:")
-output_format = st.radio("🧾 Choose Output Format:", ["Formal Text", "Podcast Style"])
+output_format = st.radio("🧾 Choose Output Format:", ["Summarise with text", "Summarise with Audio"])
 
 if st.button("🚀 Analyze Video"):
     if not link:
