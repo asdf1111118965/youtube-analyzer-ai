@@ -1,0 +1,8 @@
+streamlit
+yt-dlp
+librosa
+soundfile
+transformers
+torch
+ffmpeg-python
+gTTS
