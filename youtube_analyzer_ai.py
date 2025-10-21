@@ -93,32 +93,22 @@ def summarize_long_text(text, max_chunk_len=3000):
 
 # ---------- Function: Analyze Transcript ----------
 def analyze_content(transcript, style="Formal"):
-    st.info("🧠 Analyzing content using free text summarizer...")
-
-    text = re.sub(r"[^A-Za-z0-9.,?! ]+", " ", transcript)
-    text = re.sub(r"\s+", " ", text).strip().capitalize()
-
-    summary = summarize_long_text(text)
-    summary = ". ".join([s.strip().capitalize() for s in summary.split('.') if s.strip()])
-
-    structured_output = f"""
-    def analyze_content(transcript, style="Formal"):
     st.info("🧠 Analyzing content using GPT...")
 
     prompt = f"""
     You are a professional summarizer and content analyst.
     Read the YouTube transcript below carefully and structure your analysis strictly in this format:
 
-    1️⃣ **Heading:**  
+    1. **Heading:**  
     Provide the overall topic or main theme of the video (max 1–2 lines).
 
-    2️⃣ **Topic and Sub-Topics:**  
+    2. **Topic and Sub-Topics:**  
     - Write clear bullet points or short paragraphs explaining the main topics covered.  
     - Include key insights, concepts, or facts from each part of the video.  
     - Ensure logical flow and clarity.  
     - Avoid repetition or filler content.  
 
-    3️⃣ **Conclusion:**  
+    3. **Conclusion:**  
     Provide a concise conclusion or takeaway summarizing the overall message of the video.
 
     Write the response in a {style} tone and keep it well-organized, easy to read, and formatted with bullet points and line breaks.
@@ -133,7 +123,6 @@ def analyze_content(transcript, style="Formal"):
     )
     return response.choices[0].message.content
 
-    return structured_output
 
 # ---------- Function: Create Podcast (macOS say + ffmpeg) ----------
 import subprocess
