@@ -19,14 +19,33 @@ def get_video_id(url):
 
 
 def fetch_transcript(video_id):
-    """Fetch transcript text from YouTube."""
+    """Fetch transcript text from YouTube with fallback."""
+    from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+
     try:
+        # Try English first, then fallback to auto-generated
         transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
         transcript = " ".join([t["text"] for t in transcript_data])
         return transcript
+
+    except (TranscriptsDisabled, NoTranscriptFound):
+        st.warning("⚠️ No official subtitles found. Trying auto-generated captions...")
+        try:
+            transcript_data = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript = transcript_data.find_manually_created_transcript(['en']).fetch()
+            return " ".join([t["text"] for t in transcript])
+        except Exception:
+            st.error("❌ No subtitles available for this video. Try another one with closed captions.")
+            return None
+
+    except AttributeError:
+        st.error("⚠️ Your current YouTubeTranscriptApi version doesn’t support get_transcript. Please redeploy.")
+        return None
+
     except Exception as e:
         st.error(f"❌ Unable to fetch transcript: {e}")
         return None
+
 
 
 def get_video_info(url):
