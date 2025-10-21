@@ -1,205 +1,140 @@
 import streamlit as st
+from youtube_transcript_api import YouTubeTranscriptApi
 import yt_dlp
-import librosa
-import os
+from transformers import pipeline
 import re
-import numpy as np
-import subprocess
-from transformers import pipeline, WhisperProcessor, WhisperForConditionalGeneration
 
 # ---------- CONFIG ----------
-st.set_page_config(page_title="🎥 YouTube Analyzer AI (free)", page_icon="🤖", layout="centered")
+st.set_page_config(page_title="🎥 YouTube Analysis AI Agent (No Login, No Payment)", page_icon="🤖", layout="centered")
 
-# ---------- Load Models ----------
-@st.cache_resource
-def load_whisper():
-    model_name = "openai/whisper-tiny"  # Fast; use 'small' for better accuracy
-    processor = WhisperProcessor.from_pretrained(model_name)
-    model = WhisperForConditionalGeneration.from_pretrained(model_name)
-    return processor, model
+st.title("🎥 YouTube Analysis AI Agent (No Login, No Payment)")
+st.caption("💡 Works 100% online — Unlimited trials, no API key needed!")
 
-@st.cache_resource
-def load_summarizer():
-    return pipeline("summarization", model="facebook/bart-large-cnn")
+# ---------- Functions ----------
 
-# ---------- Function: Download YouTube Audio ----------
-def download_audio(link):
-    st.info("🎬 Downloading audio from YouTube...")
+def get_video_id(url):
+    """Extract YouTube video ID from URL."""
+    match = re.search(r"(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})", url)
+    return match.group(1) if match else None
 
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "outtmpl": "video_audio",
-        "postprocessors": [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "wav",
-            "preferredquality": "192",
-        }],
-        "postprocessor_args": [
-            "-ar", "16000"
-        ],
-        "prefer_ffmpeg": True,
-        "quiet": True
-    }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([link])
+def fetch_transcript(video_id):
+    """Fetch transcript text from YouTube."""
+    try:
+        transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+        transcript = " ".join([t["text"] for t in transcript_data])
+        return transcript
+    except Exception as e:
+        st.error(f"❌ Unable to fetch transcript: {e}")
+        return None
 
-    expected_file = "video_audio.wav"
-    if not os.path.exists(expected_file):
-        for f in os.listdir():
-            if f.startswith("video_audio") and f.endswith(".wav"):
-                os.rename(f, expected_file)
-                break
 
-    if not os.path.exists(expected_file):
-        raise FileNotFoundError("Audio file not created. Check ffmpeg or yt-dlp output.")
+def get_video_info(url):
+    """Fetch video title and provide safe download URL for audio."""
+    try:
+        with yt_dlp.YoutubeDL({'quiet': True, 'skip_download': True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            title = info.get("title", "Unknown Title")
+            webpage_url = info.get("webpage_url", url)
+            return title, webpage_url
+    except Exception as e:
+        st.warning(f"⚠️ Could not fetch video info: {e}")
+        return "Unknown Title", url
 
-    return expected_file
 
-# ---------- Function: Transcribe Audio (Chunked) ----------
-def transcribe_audio(audio_file):
-    st.info("🎧 Transcribing full audio locally (chunked Whisper)...")
-    processor, model = load_whisper()
-    audio, sr = librosa.load(audio_file, sr=16000)
+def summarize_text(transcript):
+    """Summarize transcript using transformers (local HuggingFace model)."""
+    summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+    max_chunk = 800
+    transcript = transcript.replace('\n', ' ')
+    sentences = re.split(r'(?<=[.!?]) +', transcript)
+    chunks = []
+    current_chunk = ""
 
-    chunk_length = 30 * 16000  # 30-second chunks
-    chunks = [audio[i:i + chunk_length] for i in range(0, len(audio), chunk_length)]
+    for sentence in sentences:
+        if len(current_chunk) + len(sentence) <= max_chunk:
+            current_chunk += sentence + " "
+        else:
+            chunks.append(current_chunk.strip())
+            current_chunk = sentence + " "
+    if current_chunk:
+        chunks.append(current_chunk.strip())
 
-    full_transcript = ""
-    total_chunks = len(chunks)
-
+    summary = ""
     for i, chunk in enumerate(chunks):
-        st.write(f"🔊 Processing chunk {i+1}/{total_chunks}...")
-        input_features = processor(chunk, sampling_rate=16000, return_tensors="pt").input_features
-        predicted_ids = model.generate(input_features)
-        chunk_text = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
-        full_transcript += " " + chunk_text
+        st.info(f"🧩 Summarizing part {i+1}/{len(chunks)} ...")
+        result = summarizer(chunk, max_length=200, min_length=50, do_sample=False)
+        summary += result[0]['summary_text'] + " "
 
-    return full_transcript.strip()
+    # Format into sections
+    formatted_summary = f"""
+    **1. Heading:**  
+    Overview of the video and its key discussion points.  
 
-# ---------- Function: Summarize Long Text ----------
-def summarize_long_text(text, max_chunk_len=3000):
-    summarizer = load_summarizer()
-    text = re.sub(r"\s+", " ", text).strip()
-    chunks = [text[i:i + max_chunk_len] for i in range(0, len(text), max_chunk_len)]
-    full_summary = ""
+    **2. Topic and Sub-Topics:**  
+    {summary.strip()}
 
-    for i, chunk in enumerate(chunks):
-        st.write(f"Work under construction 🚧 {i+1}/{len(chunks)}...")
-        summary = summarizer(chunk, max_length=300, min_length=80, do_sample=False)[0]['summary_text']
-        full_summary += " " + summary
-
-    return full_summary.strip()
-
-# ---------- Function: Analyze Transcript ----------
-def analyze_content(transcript, style="Formal"):
-    st.info("🧠 Analyzing content using GPT...")
-
-    prompt = f"""
-    You are a professional summarizer and content analyst.
-    Read the YouTube transcript below carefully and structure your analysis strictly in this format:
-
-    1. **Heading:**  
-    Provide the overall topic or main theme of the video (max 1–2 lines).
-
-    2. **Topic and Sub-Topics:**  
-    - Write clear bullet points or short paragraphs explaining the main topics covered.  
-    - Include key insights, concepts, or facts from each part of the video.  
-    - Ensure logical flow and clarity.  
-    - Avoid repetition or filler content.  
-
-    3. **Conclusion:**  
-    Provide a concise conclusion or takeaway summarizing the overall message of the video.
-
-    Write the response in a {style} tone and keep it well-organized, easy to read, and formatted with bullet points and line breaks.
-
-    Transcript:
-    {transcript}
+    **3. Conclusion:**  
+    The video provides insights and explanations relevant to the topic discussed.
     """
-
-    response = client.chat.completions.create(
-        model="gpt-5-turbo",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response.choices[0].message.content
+    return formatted_summary
 
 
-# ---------- Function: Create Podcast (macOS say + ffmpeg) ----------
-import subprocess
-import re
+def get_audio_download_url(url):
+    """Generate an MP3 download link (public safe)."""
+    try:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'quiet': True,
+            'skip_download': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            audio_url = info['url']
+            return audio_url
+    except Exception:
+        return None
 
-def create_podcast(text):
-    st.info("🎙️ Generating podcast narration using macOS voice (say)...")
 
-    # Convert structured text into a natural narration
-    spoken_text = re.sub(r"\*\*.*?Title.*?:\*\*", "Let's begin with the main topic:", text)
-    spoken_text = re.sub(r"\*\*.*?Main Themes.*?:\*\*", "The main themes discussed are:", spoken_text)
-    spoken_text = re.sub(r"\*\*.*?Key Facts.*?:\*\*", "Here are some key facts:", spoken_text)
-    spoken_text = re.sub(r"\*\*.*?Notable Quotes.*?:\*\*", "Some notable mentions:", spoken_text)
-    spoken_text = re.sub(r"\*\*.*?Summary.*?\*\*", "In summary:", spoken_text)
+# ---------- UI ----------
+url = st.text_input("🔗 Enter YouTube Video URL:")
 
-    # Remove extra markdown characters
-    spoken_text = re.sub(r"\*\*|[#`•\-:]", "", spoken_text)
-    spoken_text = spoken_text.replace("1️⃣", "First,").replace("2️⃣", "Next,").replace("3️⃣", "Then,")
-
-    mp3_file = "podcast_output.mp3"
-    aiff_file = "podcast_temp.aiff"
-
-    # Shorten overly long text to avoid truncation
-    safe_text = spoken_text[:4000]
-
-    # Generate AIFF using macOS 'say'
-    subprocess.run(["say", "-o", aiff_file, safe_text])
-
-    # Convert AIFF → MP3
-    subprocess.run(["ffmpeg", "-y", "-i", aiff_file, mp3_file],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-    if os.path.exists(aiff_file):
-        os.remove(aiff_file)
-
-    if os.path.exists(mp3_file) and os.path.getsize(mp3_file) > 1000:
-        return mp3_file
-    else:
-        raise FileNotFoundError("⚠️ Podcast file creation failed.")
-
-# ---------- STREAMLIT APP ----------
-st.title("🎥 YouTube Analysis AI Agent (No Login No payment)")
-st.markdown("💡 Works 100% Unlimited trials")
-
-link = st.text_input("🔗 Enter YouTube Video URL:")
-output_format = st.radio("🧾 Choose Output Format:", ["Summarise with text", "Summarise with Audio"])
+output_format = st.radio("🧾 Choose Output Format:", ["Summarise with text", "Summarise with audio"])
 
 if st.button("🚀 Analyze Video"):
-    if not link:
+    if not url:
         st.warning("Please enter a YouTube link first.")
     else:
-        try:
-            audio = download_audio(link)
-            st.audio(audio)  # 🎧 play extracted YouTube audio
+        video_id = get_video_id(url)
+        if not video_id:
+            st.error("❌ Invalid YouTube URL")
+            st.stop()
 
-            transcript = transcribe_audio(audio)
-            st.text_area("📝 Transcript Preview:", transcript[:1500] + "..." if len(transcript) > 1500 else transcript, height=200)
+        title, watch_url = get_video_info(url)
+        st.subheader(f"🎬 {title}")
 
-            style = "Formal" if output_format == "Formal Text" else "Conversational Podcast"
-            result = analyze_content(transcript, style)
+        transcript = fetch_transcript(video_id)
+        if not transcript:
+            st.error("❌ Transcript unavailable for this video (it may not have subtitles).")
+            st.stop()
 
-            if output_format == "Podcast Style":
-                podcast_path = create_podcast(result)
-                st.success("✅ Podcast created!")
-                st.audio(podcast_path, format="audio/mp3")
-            else:
-                st.success("✅ Analysis complete!")
-                st.subheader("📜 Structured Insights")
-                st.markdown(result)
+        st.success("✅ Transcript fetched successfully!")
 
-        except Exception as e:
-            st.error(f"❌ Error: {e}")
-        finally:
-            try:
-                if os.path.exists("video_audio.wav"):
-                    os.remove("video_audio.wav")
-                if os.path.exists("podcast_output.mp3"):
-                    os.remove("podcast_output.mp3")
-            except:
-                pass
+        if output_format == "Summarise with text":
+            summary = summarize_text(transcript)
+            st.subheader("📜 Summary:")
+            st.markdown(summary)
+        else:
+            st.info("🎧 Audio summarization coming soon — for now you can read the summary above.")
+            summary = summarize_text(transcript)
+            st.subheader("📜 Summary:")
+            st.markdown(summary)
+
+        # ---------- Download Audio ----------
+        st.markdown("---")
+        st.subheader("🎵 Download Audio (MP3)")
+        audio_url = get_audio_download_url(url)
+        if audio_url:
+            st.markdown(f"[⬇️ Click here to download MP3]({audio_url})")
+        else:
+            st.warning("⚠️ Unable to fetch a direct MP3 link (YouTube restrictions apply).")
