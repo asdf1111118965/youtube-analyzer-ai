@@ -4,7 +4,6 @@ import yt_dlp
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
-import whisper
 import re
 import os
 
@@ -43,13 +42,12 @@ from faster_whisper import WhisperModel
 
 @st.cache_resource
 def load_whisper_model():
-    """Load lightweight Whisper model."""
+    """Load lightweight whisper model (CPU)."""
     return WhisperModel("base", device="cpu")
 
 def transcribe_with_whisper(url):
-    """Transcribe YouTube audio when captions are unavailable."""
-    st.info("🎧 Generating transcript using Faster Whisper — please wait...")
-
+    """Transcribe YouTube audio when no captions exist."""
+    st.info("🎧 Generating transcript using Faster-Whisper — please wait...")
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': '/tmp/audio.%(ext)s',
@@ -60,18 +58,15 @@ def transcribe_with_whisper(url):
             'preferredquality': '192',
         }],
     }
-
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info).replace(".webm", ".mp3")
 
     model = load_whisper_model()
-    segments, info = model.transcribe(filename, beam_size=5)
+    segments, _ = model.transcribe(filename, beam_size=5)
     transcript = " ".join(segment.text for segment in segments)
 
-    if os.path.exists(filename):
-        os.remove(filename)
-
+    os.remove(filename)
     return transcript
 
 
