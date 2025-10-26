@@ -1,7 +1,6 @@
 import streamlit as st
 from youtube_transcript_api import YouTubeTranscriptApi
 import yt_dlp
-from transformers import pipeline
 import re
 
 # ---------- CONFIG ----------
