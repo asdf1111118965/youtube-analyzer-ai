@@ -39,9 +39,16 @@ def load_whisper_model():
     return whisper.load_model("base")
 
 
+from faster_whisper import WhisperModel
+
+@st.cache_resource
+def load_whisper_model():
+    """Load lightweight Whisper model."""
+    return WhisperModel("base", device="cpu")
+
 def transcribe_with_whisper(url):
-    """Fallback: Transcribe audio using Whisper if captions are missing."""
-    st.info("🎧 Generating transcript using Whisper — please wait 1–3 minutes...")
+    """Transcribe YouTube audio when captions are unavailable."""
+    st.info("🎧 Generating transcript using Faster Whisper — please wait...")
 
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -53,19 +60,19 @@ def transcribe_with_whisper(url):
             'preferredquality': '192',
         }],
     }
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info).replace(".webm", ".mp3")
 
     model = load_whisper_model()
-    result = model.transcribe(filename)
-    text = result["text"]
+    segments, info = model.transcribe(filename, beam_size=5)
+    transcript = " ".join(segment.text for segment in segments)
 
-    # Clean up temp file
     if os.path.exists(filename):
         os.remove(filename)
 
-    return text
+    return transcript
 
 
 def summarize_text(transcript):
