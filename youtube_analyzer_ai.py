@@ -62,28 +62,29 @@ def get_video_info(url):
 
 
 def summarize_text(transcript):
-    """Summarize transcript using transformers (local HuggingFace model)."""
-    summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-    max_chunk = 800
-    transcript = transcript.replace('\n', ' ')
-    sentences = re.split(r'(?<=[.!?]) +', transcript)
-    chunks = []
-    current_chunk = ""
+    """Summarize transcript using Sumy (lightweight, no torch required)."""
+    from sumy.parsers.plaintext import PlaintextParser
+    from sumy.nlp.tokenizers import Tokenizer
+    from sumy.summarizers.lex_rank import LexRankSummarizer
 
-    for sentence in sentences:
-        if len(current_chunk) + len(sentence) <= max_chunk:
-            current_chunk += sentence + " "
-        else:
-            chunks.append(current_chunk.strip())
-            current_chunk = sentence + " "
-    if current_chunk:
-        chunks.append(current_chunk.strip())
+    parser = PlaintextParser.from_string(transcript, Tokenizer("english"))
+    summarizer = LexRankSummarizer()
+    summary_sentences = summarizer(parser.document, 10)  # top 10 sentences
 
-    summary = ""
-    for i, chunk in enumerate(chunks):
-        st.info(f"🧩 Summarizing part {i+1}/{len(chunks)} ...")
-        result = summarizer(chunk, max_length=200, min_length=50, do_sample=False)
-        summary += result[0]['summary_text'] + " "
+    summary = " ".join(str(sentence) for sentence in summary_sentences)
+
+    formatted_summary = f"""
+    **1. Heading:**  
+    Overview of the video and its key discussion points.  
+
+    **2. Topic and Sub-Topics:**  
+    {summary.strip()}
+
+    **3. Conclusion:**  
+    The video provides insights and explanations relevant to the topic discussed.
+    """
+    return formatted_summary
+ "
 
     # Format into sections
     formatted_summary = f"""
