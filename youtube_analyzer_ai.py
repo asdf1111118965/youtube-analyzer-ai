@@ -83,20 +83,6 @@ def summarize_text(transcript):
     The video provides insights and explanations relevant to the topic discussed.
     """
     return formatted_summary
- "
-
-    # Format into sections
-    formatted_summary = f"""
-    **1. Heading:**  
-    Overview of the video and its key discussion points.  
-
-    **2. Topic and Sub-Topics:**  
-    {summary.strip()}
-
-    **3. Conclusion:**  
-    The video provides insights and explanations relevant to the topic discussed.
-    """
-    return formatted_summary
 
 
 def get_audio_download_url(url):
